@@ -19,7 +19,7 @@ alias tr='tmux a -t s1'
 alias tk='tmux kill-ses -t s1'
 alias tn2='tmux new -s s2'
 alias tr2='tmux a -t s2'
-alias tk2='tmux kill-ses -t s2
+alias tk2='tmux kill-ses -t s2'
 alias vt='vim ~/.config/tmux/tmux.conf'
 alias ut='tmux source ~/.config/tmux/tmux.conf'
 
