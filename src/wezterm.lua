@@ -15,6 +15,7 @@ return {
         -- Make Option-Right equivalent to Alt-f; forward-word
         {key="RightArrow", mods="OPT", action=wezterm.action{SendString="\x1bf"}},
     },
+    -- Theme from https://github.com/sholalkere/dotfiles/blob/main/wezterm/.config/wezterm/wezterm.lua
     adjust_window_size_when_changing_font_size = false,
     audible_bell = 'Disabled',
     bold_brightens_ansi_colors = false,
