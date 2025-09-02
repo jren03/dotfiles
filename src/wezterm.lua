@@ -1,4 +1,5 @@
 local wezterm = require('wezterm')
+local act = wezterm.action
 
 wezterm.on(
     'format-tab-title',
@@ -14,6 +15,8 @@ return {
         {key="LeftArrow", mods="OPT", action=wezterm.action{SendString="\x1bb"}},
         -- Make Option-Right equivalent to Alt-f; forward-word
         {key="RightArrow", mods="OPT", action=wezterm.action{SendString="\x1bf"}},
+        -- Send Ctrl when CMD pressed on Mac
+        {key = "/", mods = "CMD", action = act.SendString("\x1f") },
     },
     -- Theme from https://github.com/sholalkere/dotfiles/blob/main/wezterm/.config/wezterm/wezterm.lua
     adjust_window_size_when_changing_font_size = false,
