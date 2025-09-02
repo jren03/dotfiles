@@ -9,9 +9,14 @@ alias gb='git branch'
 
 # Conda
 alias conc='conda create -n'
-alias dc='conda deactivate'
 alias cr='conda env remove -n'
+alias dc='conda deactivate'
 alias cl='conda env list'
+
+# Or if mamba
+# alias conc='mamba create -n'
+# alias cr='mamba env remove -n'
+
 
 # Tmux
 alias tl='tmux ls'
