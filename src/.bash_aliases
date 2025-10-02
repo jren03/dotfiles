@@ -17,7 +17,6 @@ alias cl='conda env list'
 # alias conc='mamba create -n'
 # alias cr='mamba env remove -n'
 
-
 # Tmux
 alias tl='tmux ls'
 alias tn='tmux new -s s1'
@@ -33,7 +32,6 @@ alias ut='tmux source ~/.config/tmux/tmux.conf'
 alias vb='vim ~/.bashrc'
 alias ub='source ~/.bashrc'
 alias vv='vim ~/.vimrc'
-alias uv='source ~/.vimrc'
 alias vc='vim ~/.ssh/config'
 alias uc='source ~/.ssh/config'
 
