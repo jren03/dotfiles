@@ -1,0 +1,344 @@
+#!/usr/bin/env python3
+# gpuwatch.py — SSH + nvidia-smi GPU dashboard (table + red/green heatmap)
+# - No external deps. Uses system `ssh` and remote `nvidia-smi`.
+# - Table is monochrome; heatmap uses ONLY red/green.
+# - Prints "Available" summary per server and overall.
+# - One-shot (no loop) and does not clear the screen.
+
+import os
+import re
+import sys
+import shlex
+import getpass
+import shutil
+import argparse
+import subprocess
+from concurrent.futures import ThreadPoolExecutor, as_completed
+
+# -------------------- Config --------------------
+SERVERS = ["real002", "real003", "real004", "real005", "real006", "real007"]
+
+OWNERS = {
+    "real002": ["Chuer", "Chuer", "Chuer/Hojung", "Chuer/Hojung", "Max", "Max", "Zhanyi", "Zhanyi"],
+    "real003": ["", "", "Austin", "Austin", "John/Eric", "John/Eric", "John", "John"],
+    "real004": ["Mengda", "Mengda", "Mengda", "Mengda"],
+    "real005": ["Zeyi", "Zeyi", "Zeyi", "Zeyi"],
+    "real006": ["Xiaomeng/Haoyu", "Xiaomeng/Haoyu", "Xiaomeng/Haoyu", "Xiaomeng/Haoyu",
+                "Huy/Mengda", "Huy/Mengda", "Huy/Mengda", "Huy/Mengda"],
+    "real007": ["Mandi", "Mandi", "", "", "", "", "Hojung", "Hojung"],
+}
+
+USERNAME = os.environ.get("GPUWATCH_USER") or getpass.getuser()
+DNS_SUFFIX = os.environ.get("GPUWATCH_DNS_SUFFIX", ".stanford.edu")
+SSH_CONNECT_TIMEOUT = int(os.environ.get("GPUWATCH_SSH_TIMEOUT", "8"))
+REMOTE_CMD_TIMEOUT = int(os.environ.get("GPUWATCH_REMOTE_TIMEOUT", "15"))
+
+# A GPU is considered "free" if util==0 and total GPU process memory <= threshold (to ignore 0.1G persistence).
+AVAILABLE_MEM_MB_THRESHOLD = float(os.environ.get("GPUWATCH_AVAIL_MB", "400"))
+
+SENTINEL = "__GPUWATCH_SPLIT__"
+# ------------------------------------------------
+
+def fqdn(host: str) -> str:
+    return host if "." in host or not DNS_SUFFIX else host + DNS_SUFFIX
+
+def build_remote_script() -> str:
+    # Three sections separated by SENTINEL:
+    # 1) GPU info: index,gpu_uuid,utilization.gpu,memory.used,memory.total
+    # 2) Running compute apps: gpu_uuid,pid,used_memory
+    # 3) ps table: pid user
+    return (
+        "export LC_ALL=C LANG=C PATH=/usr/sbin:/usr/bin:/bin:$PATH; "
+        'NVS="$(command -v nvidia-smi || echo /usr/bin/nvidia-smi)"; '
+        '[ -x "$NVS" ] || { printf "__ERR_NO_NVIDIA_SMI__\\n"; exit 3; }; '
+        '$NVS --query-gpu=index,gpu_uuid,utilization.gpu,memory.used,memory.total '
+        "--format=csv,noheader,nounits 2>/dev/null; "
+        f'printf "\\n{SENTINEL}\\n"; '
+        '$NVS --query-compute-apps=gpu_uuid,pid,used_memory '
+        "--format=csv,noheader,nounits 2>/dev/null || true; "
+        f'printf "\\n{SENTINEL}\\n"; '
+        "ps -eo pid,user --no-headers 2>/dev/null || true"
+    )
+
+def run_remote(server: str) -> dict:
+    remote_script = build_remote_script()
+    ssh_cmd = [
+        "ssh",
+        "-o", "BatchMode=yes",
+        "-o", "StrictHostKeyChecking=accept-new",
+        "-o", f"ConnectTimeout={SSH_CONNECT_TIMEOUT}",
+        "-o", "LogLevel=ERROR",
+        f"{USERNAME}@{fqdn(server)}",
+        "bash", "-lc",
+        shlex.quote(remote_script),
+    ]
+    try:
+        proc = subprocess.run(ssh_cmd, capture_output=True, text=True, timeout=REMOTE_CMD_TIMEOUT)
+    except subprocess.TimeoutExpired:
+        return {"error": "timeout"}
+    except Exception as e:
+        return {"error": str(e)}
+
+    if proc.returncode != 0:
+        return {"error": f"ssh exited {proc.returncode}: {(proc.stderr or proc.stdout or '').strip()}"}
+
+    stdout = (proc.stdout or "").strip()
+    if "__ERR_NO_NVIDIA_SMI__" in stdout:
+        return {"error": "nvidia-smi not found on remote"}
+
+    return parse_remote_output(stdout)
+
+def parse_remote_output(text: str) -> dict:
+    parts = re.split(r"\r?\n" + re.escape(SENTINEL) + r"\r?\n", text, maxsplit=2)
+    if len(parts) < 3:
+        return {"error": "malformed output"}
+
+    raw_gpu, raw_apps, raw_ps = parts
+
+    # ps: pid -> user
+    pid_to_user = {}
+    for ln in raw_ps.splitlines():
+        ln = ln.strip()
+        if not ln: continue
+        cols = ln.split(None, 1)
+        if len(cols) != 2: continue
+        try:
+            pid = int(cols[0])
+        except ValueError:
+            continue
+        pid_to_user[pid] = cols[1].strip()
+
+    # apps per GPU UUID
+    apps_by_uuid = {}
+    for ln in raw_apps.splitlines():
+        ln = ln.strip()
+        if not ln or "," not in ln: continue
+        cols = [c.strip() for c in ln.split(",")]
+        if len(cols) < 3: continue
+        uuid, pid_str, used_mem_str = cols[:3]
+        try:
+            pid = int(pid_str); mem_mb = float(used_mem_str)
+        except ValueError:
+            continue
+        user = pid_to_user.get(pid, "?")
+        apps_by_uuid.setdefault(uuid, []).append((pid, mem_mb, user))
+
+    # GPUs
+    gpus = []
+    for ln in raw_gpu.splitlines():
+        ln = ln.strip()
+        if not ln or "," not in ln: continue
+        cols = [c.strip() for c in ln.split(",")]
+        if len(cols) < 5: continue
+        idx_str, uuid, util_str, used_str, total_str = cols[:5]
+        try:
+            idx = int(idx_str)
+            util = None if util_str == "N/A" else int(util_str)
+            mem_used_mb = float(used_str); mem_total_mb = float(total_str)
+        except ValueError:
+            continue
+
+        users = {}
+        proc_mem_total = 0.0
+        for _pid, mem_mb, user in apps_by_uuid.get(uuid, []):
+            proc_mem_total += mem_mb
+            users[user] = users.get(user, 0.0) + mem_mb
+
+        # "free" means util==0 and process memory small (≤ threshold)
+        is_free = (util in (0, None)) and (proc_mem_total <= AVAILABLE_MEM_MB_THRESHOLD)
+
+        gpus.append({
+            "index": idx,
+            "uuid": uuid,
+            "util": util,
+            "mem_used_mb": mem_used_mb,
+            "mem_total_mb": mem_total_mb,
+            "users": users,
+            "proc_mem_mb": proc_mem_total,
+            "free": is_free,
+        })
+
+    gpus.sort(key=lambda x: x["index"])
+    return {"gpus": gpus}
+
+# -------------------- Rendering --------------------
+
+def term_width() -> int:
+    try:
+        return shutil.get_terminal_size().columns
+    except Exception:
+        return 100
+
+def human_gib(mb: float) -> str:
+    return f"{mb/1024.0:.1f}G"
+
+def ansi(color_code: str) -> str:
+    return f"\x1b[{color_code}m"
+
+RESET = "\x1b[0m"
+RED = "31"      # standard red
+GREEN = "32"    # standard green
+ORANGE = "38;5;208"  # 256-color 'orange'
+
+def render_table(results: dict) -> str:
+    # Auto-size columns; table is monochrome.
+    w = term_width()
+    # Fixed/nominal widths
+    server_w = 10
+    gpu_w = 3
+    usage_w = 4      # "100%"
+    mem_w = 13       # "33.7G/48.0G"
+    owner_w = 16
+    base = server_w + 3 + gpu_w + 3 + usage_w + 3 + mem_w + 3 + owner_w + 3  # separators
+    users_w = max(20, w - base)
+
+    def trunc(s, width):
+        s = str(s)
+        return s if len(s) <= width else s[:width-1] + "…"
+
+    def row(cols):
+        return " | ".join(cols)
+
+    header = row([
+        trunc("Server", server_w), trunc("GPU", gpu_w),
+        trunc("Use", usage_w), trunc("Memory", mem_w),
+        trunc("Owner", owner_w), trunc("Users (mem)", users_w)
+    ])
+    sep = "-" * len(header)
+    out = [header, sep]
+
+    overall_free = 0
+    overall_total = 0
+
+    for server in SERVERS:
+        data = results.get(server, {"error": "No data"})
+        if "error" in data:
+            out.append(row([trunc(server, server_w), " -", "ERR", "-", "-", trunc(data["error"], users_w)]))
+            continue
+
+        gpus = data.get("gpus", [])
+        owners = OWNERS.get(server, [])
+        free_count = sum(1 for g in gpus if g["free"])
+        overall_free += free_count
+        overall_total += len(gpus)
+
+        first = True
+        for gpu in gpus:
+            idx = gpu["index"]
+            util = "-" if gpu["util"] is None else f"{gpu['util']}%"
+            mem = f"{human_gib(gpu['mem_used_mb'])}/{human_gib(gpu['mem_total_mb'])}"
+            owner = owners[idx] if idx < len(owners) else ""
+            users_str = ", ".join(f"{u}({human_gib(mb)})" for u, mb in gpu["users"].items()) or "-"
+            out.append(row([
+                trunc(f"{server} [{free_count}/{len(gpus)}]", server_w) if first else " " * server_w,
+                f"{idx:>{gpu_w}}",
+                f"{util:>{usage_w}}",
+                trunc(mem, mem_w),
+                trunc(owner, owner_w),
+                trunc(users_str, users_w),
+            ]))
+            first = False
+        # blank spacer between servers
+        out.append("")
+
+    # Overall summary
+    out.append(f"Available (free GPUs): {overall_free}/{overall_total}")
+    return "\n".join(out).rstrip()
+
+def render_heatmap(results: dict, show_owners: bool, no_color: bool) -> str:
+    # Red/green only for cells. Fraction [free/total] is green/orange/red.
+    w = term_width()
+    per_gpu = max(3, min(5, max(20, w - 14) // 8))  # 3..5
+
+    def cell_text(util):
+        if util is None: return "NA" if per_gpu >= 3 else "N"
+        return f"{util:>2}%" if per_gpu >= 4 else f"{min(util,99):>2}"
+
+    def colorize_cell(s, free):
+        if no_color or not sys.stdout.isatty(): return s
+        return (ansi(GREEN) + s + RESET) if free else (ansi(RED) + s + RESET)
+
+    def colorize_avail(free_cnt, total_cnt, text):
+        if no_color or not sys.stdout.isatty(): return text
+        if total_cnt == 0:
+            return text
+        code = GREEN if free_cnt == total_cnt else (RED if free_cnt == 0 else ORANGE)
+        return ansi(code) + text + RESET
+
+    lines = []
+    overall_free = 0
+    overall_total = 0
+
+    for server in SERVERS:
+        data = results.get(server, {"error": "No data"})
+        if "error" in data:
+            lines.append(f"{server:<10} ERR  {data['error']}")
+            lines.append("")
+            continue
+
+        gpus = data.get("gpus", [])
+        total = len(gpus)
+        free_count = sum(1 for g in gpus if g["free"])
+        overall_free += free_count
+        overall_total += total
+
+        # title with colored per-server availability
+        avail_txt = f"[{free_count}/{total}]"
+        lines.append(f"{server} " + colorize_avail(free_count, total, avail_txt))
+
+        # one row of cells
+        cells = []
+        for g in gpus:
+            txt = cell_text(g["util"])
+            cells.append(colorize_cell(f"{txt:>{per_gpu}}", g["free"]))
+        lines.append("U " + " ".join(cells))
+
+        # optional owners row (compressed)
+        if show_owners:
+            owners = OWNERS.get(server, [])
+            o_cells = []
+            for i in range(total):
+                name = owners[i] if i < len(owners) else ""
+                token = (name.split('/')[0] if name else "")[:per_gpu].ljust(per_gpu)
+                o_cells.append(token)
+            lines.append("O " + " ".join(o_cells))
+
+        # gpu indices row
+        idx_cells = [f"{i:>{per_gpu}}" for i in range(total)]
+        lines.append("  " + " ".join(idx_cells))
+        lines.append("")
+
+    lines.append(f"Available (free GPUs): {overall_free}/{overall_total}")
+    return "\n".join(lines).rstrip()
+
+
+# -------------------- Orchestration --------------------
+
+def fetch_all_once():
+    results = {}
+    with ThreadPoolExecutor(max_workers=len(SERVERS)) as ex:
+        fut = {ex.submit(run_remote, s): s for s in SERVERS}
+        for f in as_completed(fut):
+            s = fut[f]
+            try:
+                results[s] = f.result()
+            except Exception as e:
+                results[s] = {"error": str(e)}
+    return results
+
+def main():
+    ap = argparse.ArgumentParser(description="GPU usage across servers (table + heatmap).")
+    ap.add_argument("--mode", choices=["table", "heatmap"], default="heatmap", help="Output style.")
+    ap.add_argument("--owners", action="store_true", help="Show owners row in heatmap.")
+    ap.add_argument("--no-color", action="store_true", help="Disable ANSI colors (heatmap only).")
+    args = ap.parse_args()
+
+    results = fetch_all_once()
+    if args.mode == "table":
+        print(render_table(results))
+    else:
+        print(render_heatmap(results, show_owners=args.owners, no_color=args.no_color))
+
+if __name__ == "__main__":
+    main()
+
