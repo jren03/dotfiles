@@ -29,7 +29,7 @@ alias vt='vim ~/.config/tmux/tmux.conf'
 alias ut='tmux source ~/.config/tmux/tmux.conf'
 
 # Vim and Source
-alias vb='vim ~/.bashrc'
+alias vb='vim ~/.bash_aliases'
 alias ub='source ~/.bashrc'
 alias vv='vim ~/.vimrc'
 alias vc='vim ~/.ssh/config'
