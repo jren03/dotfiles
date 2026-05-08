@@ -122,3 +122,57 @@ return {
         inactive_titlebar_bg = "rgb(230,230,230)",
     }
 }
+
+
+
+--[[
+**********************************************************************
+Additional instructions for adding server name to wezterm tabs
+**********************************************************************
+
+**********************************************************************
+1. Place this in ~/.zshrc
+ssh() {
+  local host=""
+
+  for arg in "$@"; do
+    case "$arg" in
+      -*)
+        ;;
+      *)
+        host="$arg"
+        ;;
+    esac
+  done
+
+  if [ -n "$host" ] && type __wezterm_set_user_var >/dev/null 2>&1; then
+    __wezterm_set_user_var WEZTERM_SSH_HOST "$host"
+  fi
+
+  command ssh "$@"
+  local status=$?
+
+  if type __wezterm_set_user_var >/dev/null 2>&1; then
+    __wezterm_set_user_var WEZTERM_SSH_HOST ""
+  fi
+
+  return $status
+}
+**********************************************************************
+
+
+**********************************************************************
+2. Install 
+**********************************************************************
+mkdir -p ~/.config/wezterm
+
+curl -fsSL \
+  https://raw.githubusercontent.com/wez/wezterm/main/assets/shell-integration/wezterm.sh \
+  -o ~/.config/wezterm/wezterm.sh
+
+cat >> ~/.zshrc <<'EOF'
+
+# WezTerm shell integration
+[ -f ~/.config/wezterm/wezterm.sh ] && . ~/.config/wezterm/wezterm.sh
+EOF
+]]
