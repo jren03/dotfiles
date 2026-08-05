@@ -112,7 +112,7 @@ return {
     },
     font_size = 16,
     front_end = 'WebGpu',
-    hide_tab_bar_if_only_one_tab = true,
+    hide_tab_bar_if_only_one_tab = false,    
     line_height = 0.95,
     show_update_window = false,
     window_background_opacity = 1.0,
