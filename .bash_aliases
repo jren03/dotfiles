@@ -14,7 +14,6 @@ alias cl='conda env list'
 # alias conc='mamba create -n'
 # alias cr='mamba env remove -n'
 
-
 # Tmux
 alias tl='tmux ls'
 alias tn='tmux new -s s1'
@@ -27,10 +26,9 @@ alias vt='vim ~/.config/tmux/tmux.conf'
 alias ut='tmux source ~/.config/tmux/tmux.conf'
 
 # Vim and Source
-alias vb='vim ~/.bashrc'
-alias ub='source ~/.bashrc'
+alias vb='vim ~/.bash_aliases'
+alias ub='source ~/.bash_aliases'
 alias vv='vim ~/.vimrc'
-alias uv='source ~/.vimrc'
 alias vc='vim ~/.ssh/config'
 alias uc='source ~/.ssh/config'
 
@@ -51,4 +49,21 @@ alias storage='du -hs * | sort -h'
 alias rs='rsync -azch --info=progress2'
 alias tb='tensorboard --logdir'
 
+################ DEVELOPMENT PATH ALIAS ################
+# Working directory
+alias work='cd /store/real/renjt'
+
+# Bimanual Assembly Development
 alias bi='conda activate bimanual_assembly && cd /store/real/renjt/bimanual_assembly/ && source set_env.sh'
+
+# Pyrite Development
+alias py='conda activate pyrite && cd /store/real/renjt/PyriteParent/ && source set_env.sh' 
+alias data='conda activate data-dexmimicgen && cd /home/renjt/workspace/offline_learning_data_study/ && source set_env.sh'
+
+# Claude Code accounts (isolated via CLAUDE_CONFIG_DIR; default `claude` uses ~/.claude)
+alias claude-school='CLAUDE_CONFIG_DIR=/home/renjt/.claude-school command claude'
+
+# Codex accounts (isolated via CODEX_HOME; default `codex` uses ~/.codex)
+alias codex-school='CODEX_HOME=/home/renjt/.codex-school command codex'
+################ DEVELOPMENT PATH ALIAS ################
+

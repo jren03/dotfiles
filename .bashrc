@@ -2,6 +2,36 @@
 # see /usr/share/doc/bash/examples/startup-files (in the package bash-doc)
 # for examples
 
+# --- Environment for EVERY shell: interactive, `ssh host 'cmd'`, and agent tool calls. ---
+# Must stay above the interactivity guard below: non-interactive shells return there, so
+# anything exported after it never reaches remote commands (that is how ~/.cache/uv and
+# ~/.cache/torch filled up on NFS). /home is NFS shared by all hosts; caches and temp
+# files go to per-host /local.
+if [ -d "/local/real/$USER" ]; then
+    export XDG_CACHE_HOME=/local/real/$USER/.cache
+    export HF_HOME=$XDG_CACHE_HOME/huggingface
+    export PIP_CACHE_DIR=$XDG_CACHE_HOME/pip
+    export UV_CACHE_DIR=$XDG_CACHE_HOME/uv
+    export npm_config_cache=$XDG_CACHE_HOME/npm   # npm ignores XDG_CACHE_HOME
+    export TORCH_HOME=$XDG_CACHE_HOME/torch
+    export TRITON_CACHE_DIR=$XDG_CACHE_HOME/triton
+    export MPLCONFIGDIR=$XDG_CACHE_HOME/matplotlib
+    export PYTHONPYCACHEPREFIX=$XDG_CACHE_HOME/pycache
+    export NUMBA_CACHE_DIR=$XDG_CACHE_HOME/numba
+    export CUDA_CACHE_PATH=$XDG_CACHE_HOME/cuda
+    export TMPDIR=/local/real/$USER/tmp
+    export WANDB_DIR=/local/real/$USER/wandb
+    export WANDB_CACHE_DIR=$XDG_CACHE_HOME/wandb
+    export WANDB_CONFIG_DIR=/local/real/$USER/wandb/config
+    export WANDB_DATA_DIR=/local/real/$USER/wandb/data
+    export WANDB_ARTIFACT_DIR=/local/real/$USER/wandb/artifacts
+fi
+export HYDRA_FULL_ERROR=1
+case ":$PATH:" in   # guarded so re-sourcing does not keep prepending
+    *":$HOME/.local/bin:"*) ;;
+    *) export PATH="$HOME/local/node/node-v18.19.0-linux-x64/bin:$HOME/.npm-global/bin:$HOME/.local/bin:$HOME/bin:/home/real/bin:$PATH" ;;
+esac
+
 # If not running interactively, don't do anything
 case $- in
     *i*) ;;
@@ -98,8 +128,6 @@ alias alert='notify-send --urgency=low -i "$([ $? = 0 ] && echo terminal || echo
 
 # Alias definitions.
 # You may want to put all your additions into a separate file like
-# ~/.bash_aliases, instead of adding them here directly.
-# See /usr/share/doc/bash-doc/examples in the bash-doc package.
 
 if [ -f ~/.bash_aliases ]; then
     . ~/.bash_aliases
@@ -120,23 +148,22 @@ fi
 
 # >>> conda initialize >>>
 # !! Contents within this block are managed by 'conda init' !!
-__conda_setup="$('/store/real/renjt/conda/miniforge3/bin/conda' 'shell.bash' 'hook' 2> /dev/null)"
+__conda_setup="$('/home/renjt/miniforge3/bin/conda' 'shell.bash' 'hook' 2> /dev/null)"
 if [ $? -eq 0 ]; then
     eval "$__conda_setup"
 else
-    if [ -f "/store/real/renjt/conda/miniforge3/etc/profile.d/conda.sh" ]; then
-        . "/store/real/renjt/conda/miniforge3/etc/profile.d/conda.sh"
+    if [ -f "/home/renjt/miniforge3/etc/profile.d/conda.sh" ]; then
+        . "/home/renjt/miniforge3/etc/profile.d/conda.sh"
     else
-        export PATH="/store/real/renjt/conda/miniforge3/bin:$PATH"
+        export PATH="/home/renjt/miniforge3/bin:$PATH"
     fi
 fi
 unset __conda_setup
 # <<< conda initialize <<<
+
 [ -f "$HOME/.secrets" ] && . "$HOME/.secrets"
 
-export HF_HOME=/local/real/$USER/.cache/huggingface
-export PIP_CACHE_DIR=/local/real/$USER/.cache/pip
-export UV_CACHE_DIR=/local/real/$USER/.cache/uv
-export WANDB_CACHE_DIR=/local/real/$USER/.cache/wandb
-export PATH="/home/real/bin/:${PATH}"
+# For backing up dotfiles
 alias cfg="git --git-dir=$HOME/.cfg --work-tree=$HOME"
+
+. "$HOME/.cargo/env"
