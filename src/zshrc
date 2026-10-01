@@ -1,0 +1,50 @@
+# Shared zsh setup (Mac). Sourced from ~/.zshrc by the block install_deps.sh adds.
+DOTFILES="${DOTFILES:-$HOME/dotfiles}"
+
+# Homebrew on PATH (Apple Silicon, then Intel)
+if ! command -v brew >/dev/null; then
+    for _brew in /opt/homebrew/bin/brew /usr/local/bin/brew; do
+        [ -x "$_brew" ] && eval "$("$_brew" shellenv)" && break
+    done
+    unset _brew
+fi
+
+# History: large, written after every command, shared between open shells
+HISTFILE="${HISTFILE:-$HOME/.zsh_history}"
+HISTSIZE=100000
+SAVEHIST=100000
+setopt INC_APPEND_HISTORY SHARE_HISTORY HIST_IGNORE_SPACE HIST_IGNORE_DUPS EXTENDED_HISTORY
+
+source "$DOTFILES/src/.bash_aliases"
+
+# Fuzzy finder (Ctrl-R history, Ctrl-T files, Alt-C cd) and frecency cd (`z <part of path>`)
+for _tool in fzf zoxide; do
+    command -v "$_tool" >/dev/null || echo "zshrc: $_tool not on PATH (run $DOTFILES/install_deps.sh)" >&2
+done
+unset _tool
+command -v fzf >/dev/null && source <(fzf --zsh)
+command -v zoxide >/dev/null && eval "$(zoxide init zsh)"
+
+# WezTerm: shell integration plus the ssh host shown in the tab title (see src/wezterm.lua)
+[ -f "$HOME/.config/wezterm/wezterm.sh" ] && source "$HOME/.config/wezterm/wezterm.sh"
+ssh() {
+    # host = first argument that is neither an option nor an option's value
+    local host="" skip=0 arg
+    for arg in "$@"; do
+        if [ "$skip" = 1 ]; then skip=0; continue; fi
+        case "$arg" in
+            -[BbcDEeFIiJLlmOoPpQRSWw]) skip=1 ;;
+            -*) ;;
+            *) host="$arg"; break ;;
+        esac
+    done
+    if [ -n "$host" ] && type __wezterm_set_user_var >/dev/null 2>&1; then
+        __wezterm_set_user_var WEZTERM_SSH_HOST "$host"
+    fi
+    command ssh "$@"
+    local rc=$?
+    if type __wezterm_set_user_var >/dev/null 2>&1; then
+        __wezterm_set_user_var WEZTERM_SSH_HOST ""
+    fi
+    return $rc
+}

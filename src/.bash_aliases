@@ -1,3 +1,4 @@
+# shellcheck shell=bash
 # Shared aliases and functions: sourced by bash on the lab servers and by zsh on the Mac.
 # Keep this file portable (no bash-only or zsh-only syntax outside a version check).
 # Server-only aliases live in ~/.bash_aliases on the servers (tracked by the `cfg` repo).
@@ -5,6 +6,7 @@ DOTFILES="${DOTFILES:-$HOME/dotfiles}"
 
 # Prompt line (zsh only; bash keeps the prompt from ~/.bashrc)
 if [ -n "$ZSH_VERSION" ]; then
+    # shellcheck disable=SC2034  # read by zsh
     PROMPT='%B%F{blue}%d%f%b:~$ '
 fi
 
