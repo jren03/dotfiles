@@ -46,8 +46,12 @@ HISTCONTROL=ignoreboth
 shopt -s histappend
 
 # for setting history length see HISTSIZE and HISTFILESIZE in bash(1)
-HISTSIZE=1000
-HISTFILESIZE=2000
+# Large history, appended after every command: many panes on many hosts share this
+# NFS file, and the 1000-line default dropped commands across sessions.
+HISTSIZE=100000
+HISTFILESIZE=200000
+HISTTIMEFORMAT='%F %T '
+PROMPT_COMMAND="history -a${PROMPT_COMMAND:+; $PROMPT_COMMAND}"
 
 # check the window size after each command and, if necessary,
 # update the values of LINES and COLUMNS.
@@ -129,6 +133,12 @@ alias alert='notify-send --urgency=low -i "$([ $? = 0 ] && echo terminal || echo
 # Alias definitions.
 # You may want to put all your additions into a separate file like
 
+# Shared aliases (same file the Mac zsh sources), then server-only ones.
+if [ -f "$HOME/dotfiles/src/.bash_aliases" ]; then
+    . "$HOME/dotfiles/src/.bash_aliases"
+else
+    echo "bashrc: $HOME/dotfiles/src/.bash_aliases missing; shared aliases not loaded" >&2
+fi
 if [ -f ~/.bash_aliases ]; then
     . ~/.bash_aliases
 fi
@@ -167,3 +177,12 @@ unset __conda_setup
 alias cfg="git --git-dir=$HOME/.cfg --work-tree=$HOME"
 
 . "$HOME/.cargo/env"
+
+# Fuzzy finder (Ctrl-R history, Ctrl-T files, Alt-C cd) and frecency cd (`z <part of path>`).
+# Installed in /home/renjt/.local/opt/cli, linked into ~/.local/bin (NFS: every host).
+for _tool in fzf zoxide; do
+    command -v "$_tool" >/dev/null || echo "bashrc: $_tool not on PATH" >&2
+done
+unset _tool
+command -v fzf >/dev/null && eval "$(fzf --bash)"
+command -v zoxide >/dev/null && eval "$(zoxide init bash)"

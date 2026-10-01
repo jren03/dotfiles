@@ -1,63 +1,12 @@
-# ---------------------------- Aliases ----------------------------
-# Git Commands
-alias gs='git status'
-alias gp='git pull'
-alias gb='git branch'
+# Server-only aliases (lab servers). Shared aliases come from ~/dotfiles/src/.bash_aliases,
+# which ~/.bashrc sources first; edit that file for anything the Mac should get too.
 
-# Conda
-alias conc='conda create -n'
-alias cr='conda env remove -n'
-alias dc='conda deactivate'
-alias cl='conda env list'
+alias vbs='vim ~/.bash_aliases'
 
-# Or if mamba
-# alias conc='mamba create -n'
-# alias cr='mamba env remove -n'
-
-# Tmux
-alias tl='tmux ls'
-alias tn='tmux new -s s1'
-alias tr='tmux a -t s1'
-alias tk='tmux kill-ses -t s1'
-alias tn2='tmux new -s s2'
-alias tr2='tmux a -t s2'
-alias tk2='tmux kill-ses -t s2'
-alias vt='vim ~/.config/tmux/tmux.conf'
-alias ut='tmux source ~/.config/tmux/tmux.conf'
-
-# Vim and Source
-alias vb='vim ~/.bash_aliases'
-alias ub='source ~/.bash_aliases'
-alias vv='vim ~/.vimrc'
-alias vc='vim ~/.ssh/config'
-alias uc='source ~/.ssh/config'
-
-# Python
-alias pu='pip install --upgrade pip'
-alias pip='pip3'
-alias sage-jn='sage -n jupyter'
-alias python='python3'
-alias py='python -m pdb -c c'
-
-# General
-alias hh='history | grep '
-alias lw='ls -l | wc -l'
-alias ls='ls --color=auto'
-alias storage='du -hs * | sort -h'
-
-# Miscellaneous
-alias rs='rsync -azch --info=progress2'
-alias tb='tensorboard --logdir'
-
-################ DEVELOPMENT PATH ALIAS ################
 # Working directory
 alias work='cd /store/real/renjt'
 
-# Bimanual Assembly Development
-alias bi='conda activate bimanual_assembly && cd /store/real/renjt/bimanual_assembly/ && source set_env.sh'
-
-# Pyrite Development
-alias py='conda activate pyrite && cd /store/real/renjt/PyriteParent/ && source set_env.sh' 
+# Offline learning data study
 alias data='conda activate data-dexmimicgen && cd /home/renjt/workspace/offline_learning_data_study/ && source set_env.sh'
 
 # Claude Code accounts (isolated via CLAUDE_CONFIG_DIR; default `claude` uses ~/.claude)
@@ -65,5 +14,3 @@ alias claude-school='CLAUDE_CONFIG_DIR=/home/renjt/.claude-school command claude
 
 # Codex accounts (isolated via CODEX_HOME; default `codex` uses ~/.codex)
 alias codex-school='CODEX_HOME=/home/renjt/.codex-school command codex'
-################ DEVELOPMENT PATH ALIAS ################
-
