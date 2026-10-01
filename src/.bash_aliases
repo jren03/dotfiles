@@ -1,11 +1,20 @@
-# Prompt Line
-PROMPT='%B%F{blue}%d%f%b:~$ '
+# Shared aliases and functions: sourced by bash on the lab servers and by zsh on the Mac.
+# Keep this file portable (no bash-only or zsh-only syntax outside a version check).
+# Server-only aliases live in ~/.bash_aliases on the servers (tracked by the `cfg` repo).
+DOTFILES="${DOTFILES:-$HOME/dotfiles}"
+
+# Prompt line (zsh only; bash keeps the prompt from ~/.bashrc)
+if [ -n "$ZSH_VERSION" ]; then
+    PROMPT='%B%F{blue}%d%f%b:~$ '
+fi
 
 # ---------------------------- Aliases ----------------------------
 # Git Commands
 alias gs='git status'
 alias gp='git pull'
 alias gb='git branch'
+alias gd='git diff'
+alias lg='lazygit'
 
 # Conda
 alias conc='conda create -n'
@@ -13,26 +22,23 @@ alias cr='conda env remove -n'
 alias dc='conda deactivate'
 alias cl='conda env list'
 
-# Or if mamba
-# alias conc='mamba create -n'
-# alias cr='mamba env remove -n'
-
-# Tmux
+# Tmux: `t` attaches to session s1 or creates it; `t s2` does the same for s2.
+# (The old `tr` alias shadowed the coreutils `tr` command.)
+t() { tmux new -A -s "${1:-s1}"; }
 alias tl='tmux ls'
-alias tn='tmux new -s s1'
-alias tr='tmux a -t s1'
-alias tn2='tmux new -s s2'
-alias tr2='tmux a -t s2'
 alias tk='tmux kill-ses -t'
 alias vt='vim ~/.config/tmux/tmux.conf'
 alias ut='tmux source ~/.config/tmux/tmux.conf'
 
 # Vim and Source
-alias vb='vim ~/.bash_aliases'
-alias ub='source ~/.bashrc'
+alias vb='vim "$DOTFILES/src/.bash_aliases"'
 alias vv='vim ~/.vimrc'
 alias vc='vim ~/.ssh/config'
-alias uc='source ~/.ssh/config'
+if [ -n "$ZSH_VERSION" ]; then
+    alias ub='source ~/.zshrc'
+else
+    alias ub='source ~/.bashrc'
+fi
 
 # Python
 alias pu='pip install --upgrade pip'
